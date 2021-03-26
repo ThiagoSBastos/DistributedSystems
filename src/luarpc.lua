@@ -1,70 +1,120 @@
 local socket = require("socket")
+local json = require("dependencies/json")
+local table = require("table")
 
 local luarpc = {}
+
 local servantList = {}
 
--- @param ip:
--- @param port:
--- @param interface:
--- @return :
-function luarpc.createProxy(ip, port)
-  print("Creating proxy...")
-  --dofile(interface)
-  --local functions = {}
-
-  -- create request
-  local request = 2
-
-  -- Create client
-  -- Establish connection to the server
-  local client, err = socket.connect(ip, port)
-
-  if err then
-    print("Could not create client")
+-- TODO: REMOVE THIS
+local function tprint (tbl, indent)
+  if not indent then indent = 0 end
+  for k, v in pairs(tbl) do
+    formatting = string.rep("  ", indent) .. k .. ": "
+    if type(v) == "table" then
+      print(formatting)
+      tprint(v, indent+1)
+    else
+      print(formatting .. tostring(v))
+    end
   end
-
-  local _, err = client:send(request .. "\n")
-  if err then
-    print("Error in sending message o server")
-  end
-
-  local response, err = client:receive("*l")
-  if err then
-    print("Error from server response")
-  end
-  print(response)
-
-  return 1--functions
 end
 
--- @param object:
--- @param interface:
--- @return ip and port of the servant
-function luarpc.createServant(object)--, interface)
+-- Global idl
+rpc_idl = {}
+function interface(idl)
+  rpc_idl = idl
+end
+-- TODO: Fazer o mesmo pra structs
+
+---------------------------- MARSHALLING FUNCTIONS ----------------------------
+-- TODO: tratamento de erros
+local marshall = function(t)
+  return (json.encode(t))
+end
+
+-- TODO: tratamento de erros
+local unmarshall = function(t)
+  return (json.decode(t))
+end
+----------------------------- PARSING FUNCTIONS -------------------------------
+
+local parse_idl = function(params, method_name, t_methods)
+  local isok, parsed_params, err_msg = true, params, nil
+
+  return isok, parsed_params, err_msg
+end
+
+------------------------------ PUBLIC FUNCTIONS -------------------------------
+
+-- @param ip: ip address of the server
+-- @param port: port of the server
+-- @param idl: interface file
+-- @return: proxy object
+function luarpc.createProxy(ip, port, idl)
+  print("Creating proxy...")
+
+  dofile(idl)
+
+  local proxy_obj = {}
+
+  for method_name, props in pairs(rpc_idl.methods) do
+    proxy_obj[method_name] = function(self, ...)
+      local params = {...}
+
+      -- TODO: validate with IDL
+      --local isValid = parse_idl(params, method_name, rpc_idl.methods)
+
+      -- Establish connection to the server
+      local client = assert(socket.connect(ip, port),
+                           "Could not connect client to the server")
+
+      -- Send request to server
+      local req_json = marshall({
+        method = method_name,
+        params = params
+      })
+
+      local _, err = client:send(req_json .. "\n")
+      if err then
+        print("Could not send message to server")
+      end
+
+      -- Receive response from server
+      local s_response = client:receive()
+      return s_response
+    end
+    --print("method name " .. tostring(method_name))
+  end
+
+  return proxy_obj
+end
+
+-- @param object: table containing the implementation of all functions
+-- of the interface
+-- @param idl: interface file
+-- @return: ip and port of the servant
+function luarpc.createServant(object, idl)
+  print("Creating servant number " .. #servantList + 1 .. ".")
 
   -- create socket and bind to server
-  local server = assert(socket.bind("*", 0), "Error: createServant failed binding")
-  --server:setoption("keepalive", true)
-  --server:setoption("tcp-nodelay", true)
+  local server = assert(socket.bind("*", 0),
+                        "Error: createServant failed binding")
+  server:setoption("keepalive", true)
 
-  --dofile(interface)
+  -- TODO: compare implementation with interface
 
+  -- create servant object
   local newServant = {
-    clientList = {},
-    server = server,
-    object = object,
-    --interface = interface,
+    serv = server,
+    obj = object,
+    interface = idl, -- TODO: check if we need this
   }
 
   -- Add to servantList
   table.insert(servantList, newServant)
 
-  -- Print info about the server
-  local ip, port = server:getsockname()
-  print("Server IP: " .. ip)
-  print("Server port: " .. port)
-
-  return newServant
+  return server:getsockname()
 end
 
 function luarpc.waitIncoming()
@@ -72,40 +122,40 @@ function luarpc.waitIncoming()
 
   while true do
     for _, servant in pairs(servantList) do
-      local client = servant.server:accept()
-      --if client then
-      --  client:setoption("keepalive", true)
-      --  client:setoption("tcp-nodelay", true)
-      --end
+      -- Check which servers are available to connect with clients
+      local server_ready, _, err = socket.select({servant.serv})
 
-      -- Connection info.
-      local l_ip, l_port = client:getsockname()
-      local r_ip, r_port = client:getpeername()
-      print("Client " .. tostring(r_ip) .. ":" .. tostring(r_port) .. " connected on " .. tostring(l_ip) .. ":" .. tostring(l_port))
+      for _, server in ipairs(server_ready) do
+        local client = server:accept()
+        if client then
+          client:setoption("keepalive", true)
+          client:settimeout(1)
 
-      -- receive message from client
-      local message, err = client:receive()
+          -- Connection info. TODO: remove later
+          local serv_ip, serv_port = client:getsockname()
+          local client_ip, client_port = client:getpeername()
+          print("Client " .. tostring(client_ip) .. ":" .. tostring(client_port) ..
+                " connected on " .. tostring(serv_ip) .. ":" .. tostring(serv_port))
 
-      -- Unmarshall message
-      -- Validate messageS
-      if err then
-        -- Send error to client
-        print('Unexpected message')
+          -- receive request from client
+          local req_json, err = client:receive()
 
+          -- Unmarshall request
+          local req = unmarshall(req_json)
 
+          -- Compute response
+          local response = servant.obj[req.method](table.unpack(req.params))
 
-      else
-        -- Compute result
-        -- Send result to client
-        local _, err = client:send("Server received the following value " .. message .. "\n")
-        if not err then
-          print("Success in sending response")
+          ---- Marshall result
+          local response_json = marshall(response)
+
+          -- Send result to client
+          local _, err = client:send(response_json .. "\n")
+
+          -- Close connection
+          client:close()
         end
       end
-
-      -- Close connection
-      client:close()
-
     end
   end
 end

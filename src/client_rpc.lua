@@ -1,18 +1,24 @@
 local luarpc = require("luarpc")
 
-local IP = "localhost"
+local port1 = 0
+if arg[1] then
+  port1 = arg[1]
+else
+  print("Choose a port for server 1")
+  port1 = io.read("*n")
+end
 
-print("Choose a port for server 1")
-local port1 = io.read("*n")
-
--- print("Choose a port for server 2")
--- local port2 = io.read("*n")
+local IP = "localhost" -- IP default val
+if arg[2] then
+  IP = arg[2]
+end
 
 -- interface file
 local idl = "interface.lua"
 
 local p1 = luarpc.createProxy(IP, port1, idl)
-local ans = p1:add(5, 25, 45)
+local ans = p1:add(1, 25, 1)
+
 print("The ans 1 is " .. ans)
 
 --local t,p = p1:boo(10)

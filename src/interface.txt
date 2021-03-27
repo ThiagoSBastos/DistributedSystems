@@ -11,9 +11,8 @@ struct {
 struct {
   name = "minhaStruct2",
   fields = {
-    {name = "nome" , type = "string"},
-    {name = "peso" , type = "double"},
-    {name = "idade", type = "int"},
+    {name = "coordx" , type = "double"},
+    {name = "coordy" , type = "double"},
   }
 }
 
@@ -44,6 +43,7 @@ interface {
         {direction = "in" , type = "double"},
         {direction = "in" , type = "string"},
         {direction = "in" , type = "minhaStruct"},
+        {direction = "in" , type = "number"},
         {direction = "out", type = "int"}
       }
     },

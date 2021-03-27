@@ -34,7 +34,7 @@ local giveConnectionInfo = function(client)
   local serv_ip, serv_port = client:getsockname()
   local client_ip, client_port = client:getpeername()
   print("Client " .. tostring(client_ip) .. ":" .. tostring(client_port) ..
-        " connected on " .. tostring(serv_ip) .. ":" .. tostring(serv_port))
+  " connected on " .. tostring(serv_ip) .. ":" .. tostring(serv_port))
 end
 ------------------------------ ERROR FUNCTIONS -------------------------------
 local getError = function (type)
@@ -69,8 +69,8 @@ local parseStruct = function(sz_struct)
   end
 
   if (struct.name == "int" or struct.name == "char" or
-      struct.name == "string" or struct.name == "double" or
-      struct.name == "void") then
+  struct.name == "string" or struct.name == "double" or
+  struct.name == "void") then
     error("structs's name cannot be " .. struct.name .. "!!!")
   end
 
@@ -94,43 +94,43 @@ local parseStruct = function(sz_struct)
 end
 
 local parseInterface = function (sz_interface)
-	local interface = {}
+  local interface = {}
 
   interface.name = string.match(sz_interface, "name%s*=%s*\"(%w*)\"")
-	if (not interface.name or interface.name == "") then
+  if (not interface.name or interface.name == "") then
     error("IDL without a name field isn't permitted. Aborting")
   end
-	local sz_methods = string.match(sz_interface, "methods%s*=%s*(%b{})")
+  local sz_methods = string.match(sz_interface, "methods%s*=%s*(%b{})")
 
-	interface.methods = {}
-	for sz_methodname in string.gmatch(sz_methods, "%w*%s* =%s*%b{}") do
-		local name = string.match(sz_methodname, "(%w*)%s*=%s*%b{}")
-		if (not name or name == "") then
+  interface.methods = {}
+  for sz_methodname in string.gmatch(sz_methods, "%w*%s* =%s*%b{}") do
+    local name = string.match(sz_methodname, "(%w*)%s*=%s*%b{}")
+    if (not name or name == "") then
       error("Unnamed method isn't permitted. Aborting")
     end
 
     local method = {}
 
-		method.resulttype = string.match(sz_methodname, "resulttype%s*=%s*\"(%w+)\"")
-		if not (method.resulttype or method.resulttype == "") then
+    method.resulttype = string.match(sz_methodname, "resulttype%s*=%s*\"(%w+)\"")
+    if not (method.resulttype or method.resulttype == "") then
       error("Method with no resulttype specification isn't permitted. Aborting")
     end
 
-		method.args = {}
+    method.args = {}
 
-		local sz_args = string.match(sz_methodname, "args%s*=%s*(%b{})")
-		sz_args = string.sub(sz_args, 2, -2)
+    local sz_args = string.match(sz_methodname, "args%s*=%s*(%b{})")
+    sz_args = string.sub(sz_args, 2, -2)
 
     for sz_arg in string.gmatch(sz_args, "(%b{})") do
-			arg = {}
-			arg.direction = string.match(sz_arg, "direction%s*=%s*\"(%w*)\"")
-			arg.type = string.match(sz_arg, "type%s*=%s*\"(%w*)\"")
+      arg = {}
+      arg.direction = string.match(sz_arg, "direction%s*=%s*\"(%w*)\"")
+      arg.type = string.match(sz_arg, "type%s*=%s*\"(%w*)\"")
 
-			table.insert(method.args, arg)
-		end
+      table.insert(method.args, arg)
+    end
 
-		interface.methods[name] = method
-	end
+    interface.methods[name] = method
+  end
 
   return interface
 end
@@ -141,8 +141,8 @@ local parseInterfaceFile = function(idl)
 
   local structList = {}
   for sz_struct in string.gmatch(idl, "struct%s*(%b{})") do
-	  local t_struct = parseStruct(sz_struct)
-	  structList[t_struct.name] = t_struct
+    local t_struct = parseStruct(sz_struct)
+    structList[t_struct.name] = t_struct
   end
 
   local sz_interface = string.match(idl, "interface%s*(%b{})")
@@ -170,32 +170,32 @@ function luarpc.createProxy(ip, port, idl)
 
       -- Establish connection to the server
       local client = assert(
-        socket.connect(ip, port),
-        "Could not connect client to the server"
-      )
+      socket.connect(ip, port),
+      "Could not connect client to the server"
+    )
 
-      client:settimeout(2.0)
+    client:settimeout(2.0)
 
-      -- Send request to server
-      local req_json = marshall({
-        method = method_name,
-        params = params
-      })
+    -- Send request to server
+    local req_json = marshall({
+      method = method_name,
+      params = params
+    })
 
-      local _, err = client:send(req_json .. "\n")
-      if err then
-        print("Could not send message to server")
-      end
-
-      -- Receive response from server
-      local s_response = client:receive()
-      print(s_response)
-      local unpacked_resp = unmarshall(s_response)
-      return unpacked_resp
+    local _, err = client:send(req_json .. "\n")
+    if err then
+      print("Could not send message to server")
     end
-  end
 
-  return proxy_obj
+    -- Receive response from server
+    local s_response = client:receive()
+    print(s_response)
+    local unpacked_resp = unmarshall(s_response)
+    return unpacked_resp
+  end
+end
+
+return proxy_obj
 end
 
 -- @param object: table containing the implementation of all functions
@@ -207,7 +207,7 @@ function luarpc.createServant(object, idl)
 
   -- create socket and bind to server
   local server = assert(socket.bind("*", 0),
-                        "Error: createServant failed binding")
+  "Error: createServant failed binding")
   server:setoption("keepalive", true)
 
   -- create servant
@@ -232,37 +232,36 @@ function luarpc.waitIncoming()
 
       for _, server in pairs(server_ready) do
         if type(server) ~= "number" then
-        local client = server:accept()
-        if client then
-          client:settimeout(2.0)
-          client:setoption("keepalive", true)
+          local client = server:accept()
+          if client then
+            client:settimeout(2.0)
+            client:setoption("keepalive", true)
 
-          -- Connection info. TODO: remove later
-          giveConnectionInfo(client)
+            -- Connection info. TODO: remove later
+            giveConnectionInfo(client)
 
-          -- receive request from client
-          local req_json, err = client:receive()
+            -- receive request from client
+            local req_json, err = client:receive()
 
-          print(req_json)
-          -- Unmarshall request
-          local req = unmarshall(req_json)
+            print(req_json)
+            -- Unmarshall request
+            local req = unmarshall(req_json)
 
-          -- Compute response
-          local response = {servant.obj[req.method](table.unpack(req.params))}
+            -- Compute response
+            local response = {servant.obj[req.method](table.unpack(req.params))}
 
-          -- Marshall result
-          local response_json = marshall(response)
+            -- Marshall result
+            local response_json = marshall(response)
 
-          -- Send result to client
-          local _, err = client:send(response_json .. "\n")
+            -- Send result to client
+            local _, err = client:send(response_json .. "\n")
 
-          -- Close connection
-          client:close()
+            -- Close connection
+            client:close()
+          end
         end
       end
-      end
     end
-
   end
 end
 

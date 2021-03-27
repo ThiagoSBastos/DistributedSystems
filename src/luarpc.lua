@@ -262,6 +262,7 @@ function luarpc.waitIncoming()
       end
       end
     end
+
   end
 end
 

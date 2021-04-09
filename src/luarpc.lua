@@ -7,35 +7,26 @@ local luarpc = {}
 local servantList = {}
 
 local error_msg_table = {
-  CL01 = "Client: Could not connect to server \n",
-  CL02 = "Client: Wrong number of arguments \n",
-  CL03 = "Client: Invalid argument type \n",
-  CL04 = "Client: Connection timed out \n",
-  CL05 = "Invalid argument type in struct \n",
-  SV01 = "Server: Function not implemented on the server \n",
-  IF01 = "Interface file: Interface without name \n",
-  IF02 = "Interface file: Struct without name \n",
-  IF03 = "Interface file: Invalid struct name \n",
-  IF04 = "Interface file: Invalid struct field name \n",
-  IF05 = "Interface file: Interface method without name \n",
-  IF06 = "Interface file: Interface method without result type \n",
-  IF07 = "Interface file: No interface in the interface file \n"
+  CL01 = "Error in Client: Could not connect to server \n",
+  CL02 = "Error in Client: Wrong number of arguments \n",
+  CL03 = "Error in Client: Invalid argument type \n",
+  CL04 = "Error in Client: Connection timed out \n",
+  CL05 = "Error in Client: Invalid argument type in struct \n",
+  SV01 = "Error in Server: Function not implemented on the server \n",
+  SV02 = "Error in Server: Unexpected problem while receiving message \n",
+  SV03 = "Error in Server: Unexpected problem while unmarshalling message \n",
+  SV04 = "Error in Server: Unexpected problem while sending message \n",
+  IF01 = "Error in Interface file: Interface without name \n",
+  IF02 = "Error in Interface file: Struct without name \n",
+  IF03 = "Error in Interface file: Invalid struct name \n",
+  IF04 = "Error in Interface file: Invalid struct field name \n",
+  IF05 = "Error in Interface file: Interface method without name \n",
+  IF06 = "Error in Interface file: Interface method without result type \n",
+  IF07 = "Error in Interface file: No interface in the interface file \n"
 }
 
--- TODO: REMOVE THIS
-local function tprint (tbl, indent)
-  if not indent then indent = 0 end
-  for k, v in pairs(tbl) do
-    local formatting = string.rep("  ", indent) .. k .. ": "
-    if type(v) == "table" then
-      print(formatting)
-      tprint(v, indent+1)
-    else
-      print(formatting .. tostring(v))
-    end
-  end
-end
 ------------------------------ HELPER FUNCTIONS -------------------------------
+
 local printConnectionInfo = function(client)
   local serv_ip, serv_port = client:getsockname()
   local client_ip, client_port = client:getpeername()
@@ -57,7 +48,19 @@ local printSendingMessageInfo = function(client)
   print("Servant " .. tostring(serv_ip) .. ":" .. tostring(serv_port) ..
   " sending message to Client " .. tostring(client_ip) .. ":" .. tostring(client_port))
 end
+
+local closeClient = function(client, servant)
+  for k, v in pairs(servant.clientQueue) do
+    if client == v then
+      table.remove(servant.clientQueue, k)
+    end
+  end
+
+  client:close()
+end
+
 ------------------------------ ERROR FUNCTIONS -------------------------------
+
 -- @param type: string with the type of the error (@see error_msg_table)
 local getError = function (type)
   local msg = error_msg_table[type]
@@ -66,7 +69,9 @@ local getError = function (type)
   end
   return msg
 end
+
 ---------------------------- MARSHALLING FUNCTIONS ----------------------------
+
 -- Converts a Lua table to JSON (serialize)
 -- @param t: lua table
 local marshall = function(t)
@@ -78,7 +83,9 @@ end
 local unmarshall = function(j)
   return json.decode(j)
 end
+
 ------------------------------ PARSING FUNCTIONS ------------------------------
+
 -- @param sz_struct: string that contain the struct of the interface file
 local parseStruct = function(sz_struct)
   local struct = {}
@@ -195,12 +202,16 @@ local parseInterfaceFile = function(idl)
 
   return interface, structList, errorMsg
 end
+
 ----------------------------- VALIDATION FUNCTIONS ----------------------------
+
 local validateStruct = function (struct_fields, param_spec)
   local errMsg = nil
 
   for _, field in ipairs(struct_fields) do
     if field.type ~= type(param_spec[field.name]) then
+      print(field.type)
+      print(param_spec[field.name])
       return getError("CL05")
     end
   end
@@ -256,6 +267,7 @@ local validate = function(params, idl_args, structList)
   end
   return errMsg
 end
+
 ------------------------------ PUBLIC FUNCTIONS -------------------------------
 
 -- @param ip: ip address of the server
@@ -288,7 +300,6 @@ function luarpc.createProxy(ip, port, idl)
 
       client:settimeout(10.0)
 
-      -- Send request to server TODO: Tratar
       local req_json = marshall({
         method = method_name,
         params = params
@@ -305,11 +316,8 @@ function luarpc.createProxy(ip, port, idl)
         error(err)
       end
 
-      -- TODO: Mover pro cliente
-      print(s_response)
-
       local unpacked_resp = unmarshall(s_response)
-      return unpacked_resp
+      return table.unpack(unpacked_resp)
     end
   end
 
@@ -375,6 +383,10 @@ function luarpc.waitIncoming()
 
           -- receive request from client
           local req_json, err = client:receive()
+          if err then
+            client:send(getError("SV02"))
+            closeClient(client, servant)
+          end
 
           -- Unmarshall request
           local req = unmarshall(req_json)
@@ -390,17 +402,16 @@ function luarpc.waitIncoming()
 
           -- Send result to client
           local _, err = client:send(response_json .. "\n")
+          if err then
+            client:send(getError("SV04"))
+            closeClient(client, servant)
+          end
 
           -- Giving server-side feedback
           printSendingMessageInfo(client)
 
           -- Remove client from the queue and close the connection
-          for k, v in pairs(servant.clientQueue) do
-            if client == v then
-              table.remove(servant.clientQueue, k)
-            end
-          end
-          client:close()
+          closeClient(client, servant)
         end
       end
     end
@@ -408,4 +419,3 @@ function luarpc.waitIncoming()
 end
 
 return luarpc
-

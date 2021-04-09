@@ -37,6 +37,13 @@ interface {
         {direction = "out", type = "double"}
       }
     },
+    dumpCoords = {
+      resulttype = "double",
+      args = {
+        {direction = "in" , type = "minhaStruct2"},
+        {direction = "out", type = "double"}
+      }
+    },
     foo = {
       resulttype = "double",
       args = {
